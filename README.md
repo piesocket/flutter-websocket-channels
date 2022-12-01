@@ -24,7 +24,7 @@ Create a Channel instance as shown below.
 ```dart
 Chanel channel = Channel.connect("wss://example.com", true)
 
-room.listen("system:message", (PieSocketEvent event) {
+channel.listen("system:message", (PieSocketEvent event) {
     log("WebSocket message arrived!");
     print(event.toString());
 });
