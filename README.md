@@ -36,7 +36,7 @@ Use following code to create a Channel with PieSocket's managed WebSocket server
 Get your API key and Cluster ID here: [Get API Key](https://www.piesocket.com/app/v4/register)
 
 ```dart
-var options = PieSocketOptions();
+PieSocketOptions options = PieSocketOptions();
 options.setClusterId("demo");
 options.setApiKey("VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV");
 
