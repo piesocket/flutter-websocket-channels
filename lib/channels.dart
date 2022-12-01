@@ -1,4 +1,4 @@
-library channels;
+library piesocket_channels;
 
 export 'src/piesocket.dart';
 export 'src/channel.dart';

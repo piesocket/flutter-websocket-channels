@@ -1,39 +1,66 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Dart WebSocket Client
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/guides/libraries/writing-package-pages).
+PieSocket Channels SDK for Flutter written in Dart.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-library-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/developing-packages).
--->
+This SDK can be used to communicate with any third-party WebSocket server,
+and implements auto-reconnection among other best WebSocket practices.
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
 
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+## Installation
+Add PieSocket Channels into your project.
+```
+flutter pub add piesocket_channels
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
+Import the library
 ```dart
-const like = 'sample';
+import 'package:piesocket_channels/channels.dart';
 ```
 
-## Additional information
+### Stand-alone Usage
+Create a Channel instance as shown below.
+```dart
+Chanel channel = Channel.connect("wss://example.com", true)
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+room.listen("system:message", (PieSocketEvent event) {
+    log("WebSocket message arrived!");
+    print(event.toString());
+});
+```
+
+### PieSocket's managed WebSocket server
+Use following code to create a Channel with PieSocket's managed WebSocket servers.
+
+Get your API key and Cluster ID here: [Get API Key](https://www.piesocket.com/app/v4/register)
+
+```dart
+var options = PieSocketOptions();
+options.setClusterId("demo");
+options.setApiKey("VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV");
+
+PieSocket piesocket = PieSocket(options);
+Channel channel = piesocket.join("chat-room");
+```
+
+
+[PieSocket Channels](https://piesocket.com/channels) is scalable WebSocket API service with following features:
+  - Authentication
+  - Private Channels
+  - Presence Channels
+  - Publish messages with REST API
+  - Auto-scalability
+  - Webhooks
+  - Analytics
+  - Authentication
+  - Upto 60% cost savings
+
+We highly recommend using PieSocket Channels over self hosted WebSocket servers for production applications.
+
+## Events
+`system:connected` is the event fired when WebSocket connection is ready, get a full list system messages here: [PieSocket System Messages](https://www.piesocket.com/docs/3.0/events#system-events)
+
+
+## Documentation
+For usage examples and more information, refer to: [Official SDK docs](https://www.piesocket.com/docs/3.0/flutter-websockets)

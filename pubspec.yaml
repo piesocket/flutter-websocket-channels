@@ -1,7 +1,7 @@
-name: channels
-description: A new Flutter package project.
-version: 0.0.1
-homepage:
+name: piesocket_channels
+description: WebSocket Client SDK from PieSocket Channels
+version: 1.0.1
+homepage: https://www.piesocket.com/channels
 
 environment:
   sdk: '>=2.18.4 <3.0.0'

@@ -1,6 +1,6 @@
 import 'dart:developer';
 
-import 'channels.dart';
+import 'package:piesocket_channels/channels.dart';
 
 class Example {
   late Channel room;
