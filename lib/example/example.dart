@@ -7,18 +7,16 @@ class Example {
   late PieSocket piesocket;
 
   Example() {
-    var options = PieSocketOptions();
-    options.setClusterId("demo");
-    options.setApiKey("VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV");
-    // options.setForceAuth(true);
-    options.setAuthEndpoint("https://www.piesocket.com/test");
-    options.setPresence(true);
-
-    var headers = {"Client": "tetsdk"};
-    options.setAuthHeaders(headers);
+    const options = PieSocketOptions(
+        clusterId: 'demo',
+        apiKey: 'VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV',
+        // forceAuth: true,
+        authEndpoint: 'https://www.piesocket.com/test',
+        presence: true,
+        authHeaders: {"Client": "flutter-app"});
 
     piesocket = PieSocket(options);
-    room = piesocket.join("test");
+    room = piesocket.join("test-room");
 
     room.listen("*", (PieSocketEvent event) {
       log("EVENT!");
@@ -29,13 +27,16 @@ class Example {
       log("MESSAGE!");
       print(event.toString());
     });
+
+    // any event that start with 'system:'
+    room.listen("system:*", (PieSocketEvent event) {
+      log("MESSAGE!");
+      print(event.toString());
+    });
   }
 
   void click() {
-    PieSocketEvent testevent = PieSocketEvent("testevent");
-    testevent.setData("ok");
-    testevent.setMeta("meta");
-
-    room.publish(testevent);
+    const testEvent = PieSocketEvent(event: 'testevent', data: 'ok', meta: 'web');
+    room.publish(testEvent);
   }
 }

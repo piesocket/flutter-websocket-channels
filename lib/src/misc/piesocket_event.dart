@@ -2,49 +2,33 @@ import 'dart:convert';
 import 'dart:core';
 
 class PieSocketEvent {
-  late String _event;
-  late String _data;
-  late String _meta;
+  const PieSocketEvent({
+    required this.event,
+    this.data,
+    this.meta,
+  });
 
-  PieSocketEvent(this._event) {
-    _data = "";
-    _meta = "";
-  }
+  final String event;
+  final Object? data;
+  final Object? meta;
 
-  String getEvent() {
-    return _event;
-  }
-
-  PieSocketEvent setEvent(String event) {
-    _event = event;
-    return this;
-  }
-
-  String getData() {
-    return _data;
-  }
-
-  PieSocketEvent setData(String data) {
-    _data = data;
-    return this;
-  }
-
-  String getMeta() {
-    return _meta;
-  }
-
-  PieSocketEvent setMeta(String meta) {
-    _meta = meta;
-    return this;
+  String getEncodedData() {
+    final Map<String, dynamic> payload = {};
+    payload['event'] = event;
+    payload['meta'] = meta;
+    payload['data'] = data;
+    return json.encode(payload);
   }
 
   @override
-  String toString() {
-    final Map<String, dynamic> data = {};
-    data['event'] = _event;
-    data['data'] = _data;
-    data['meta'] = _meta;
+  bool operator ==(Object other) =>
+      identical(this, other) || other is PieSocketEvent && runtimeType == other.runtimeType && data == other.data;
 
-    return json.encode(data).toString();
+  @override
+  int get hashCode => data.hashCode;
+
+  @override
+  String toString() {
+    return 'PieSocketEvent{event: $event, data: $data, meta: $meta}';
   }
 }
