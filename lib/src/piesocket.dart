@@ -13,12 +13,20 @@ class PieSocket {
   final PieSocketOptions options;
 
   Channel join(String roomId, {PieSocketOptions? options}) {
-    if (rooms.containsKey(roomId)) {
+    final opt = options ?? this.options;
+    Channel? room = rooms[roomId];
+    if (room != null) {
+      if (room.options != opt) {
+        logger.debug("Option changed for existing room instance: $roomId");
+        room.options = opt;
+        room.disconnect();
+      }
+
       logger.debug("Returning existing room instance: $roomId");
-      return rooms[roomId]!;
+      return room;
     }
 
-    Channel room = Channel(roomId, options ?? this.options, logger);
+    room = Channel(roomId, opt, logger);
     rooms[roomId] = room;
 
     return room;
@@ -39,7 +47,7 @@ class PieSocket {
   }
 
   Map<String, Channel> getAllRooms() {
-    return rooms;
+    return {...rooms};
   }
 
   /// Close all connection

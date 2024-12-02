@@ -27,6 +27,8 @@ class Channel {
   bool _shouldReconnect = false;
   bool _connected = false;
   StreamSubscription? _streamSubscription;
+  Completer<void>? _connectCompleter;
+  final _connectTracker = <String, Completer<void>>{};
 
   Channel(this.id, this.options, this.logger) {
     _shouldReconnect = false;
@@ -116,9 +118,11 @@ class Channel {
     }
   }
 
-  void connect() {
-    if (_connected) return;
+  Future<void> connect() async {
+    if (_connectCompleter != null) return _connectCompleter!.future;
 
+    final completer = Completer<void>();
+    _connectTracker['last'] = _connectCompleter = completer;
     _connected = true;
     _streamSubscription?.cancel();
     _streamSubscription = null;
@@ -134,34 +138,56 @@ class Channel {
         (message) => onMessage(message),
         cancelOnError: true,
         onError: (error) => onError(error),
-        onDone: onClosing,
+        onDone: () {
+          // if not connected yet
+          if (!_shouldReconnect && !completer.isCompleted) {
+            _connected = false;
+            _connectCompleter = null;
+            completer.completeError(PieSocketException('Failed to establish the connection'));
+            return;
+          }
+          onClosing();
+        },
       );
-    } catch (e) {
+    } catch (e, s) {
       if (e.toString().contains("will fetch from authEndpoint")) {
         logger.debug("Defer connection: fetching token from authEndpoint");
+        completer.complete();
       } else {
         _connected = false;
-        rethrow;
+        _connectCompleter = null;
+        completer.completeError(e, s);
       }
     }
+
+    return completer.future;
   }
 
   void disconnect() {
+    if (_connectCompleter?.isCompleted != true) {
+      _connectCompleter?.complete();
+    }
+
     _shouldReconnect = false;
     _connected = false;
+    _connectCompleter = null;
     ws.sink.close(NORMAL_CLOSURE_STATUS);
     _streamSubscription?.cancel();
     _streamSubscription = null;
   }
 
-  void reconnect() {
+  Future<void> reconnect() async {
     if (_shouldReconnect || !_connected) {
-      _connected = false;
-      connect();
+      // ensure completer is completed if not null and make it null in order to connect again
+      if (_connectCompleter?.isCompleted != true) _connectCompleter?.completeError('Reconnecting...');
+      _connectCompleter = null;
+      return connect();
     }
   }
 
-  bool get hasAnyListener => _listeners.isNotEmpty || _prefixListeners.isNotEmpty;
+  bool get hasAnyListener {
+    return _listeners.values.any((v) => v.values.isNotEmpty) || _prefixListeners.values.any((v) => v.values.isNotEmpty);
+  }
 
   String listen(String eventName, OnEvent callback) {
     if (eventName.endsWith('*') && eventName.length > 1) {
@@ -196,14 +222,14 @@ class Channel {
   }
 
   void removeListener(String eventName, String listenerId) {
-    if (_listeners.containsKey(eventName)) {
-      _listeners[eventName]?.remove(listenerId);
+    _listeners[eventName]?.remove(listenerId);
+
+    if (!eventName.endsWith('*')) {
+      return;
     }
 
     final prefixEventName = eventName.length > 1 ? eventName.substring(0, eventName.length - 1) : eventName;
-    if (_prefixListeners.containsKey(prefixEventName)) {
-      _prefixListeners[prefixEventName]?.remove(listenerId);
-    }
+    _prefixListeners[prefixEventName]?.remove(listenerId);
   }
 
   void removeAllListeners(String eventName) {
@@ -266,6 +292,9 @@ class Channel {
     _fireEvent(event);
 
     _shouldReconnect = true;
+    if (_connectCompleter != null && !_connectCompleter!.isCompleted && _connectTracker['last'] == _connectCompleter) {
+      _connectCompleter!.complete();
+    }
   }
 
   void onMessage(String text) {

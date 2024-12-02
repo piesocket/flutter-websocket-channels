@@ -1,4 +1,5 @@
 import 'dart:core';
+import 'package:collection/collection.dart';
 
 class PieSocketOptions {
   const PieSocketOptions({
@@ -63,6 +64,39 @@ class PieSocketOptions {
       webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PieSocketOptions &&
+          runtimeType == other.runtimeType &&
+          version == other.version &&
+          apiKey == other.apiKey &&
+          clusterId == other.clusterId &&
+          enableLogs == other.enableLogs &&
+          notifySelf == other.notifySelf &&
+          jwt == other.jwt &&
+          presence == other.presence &&
+          authEndpoint == other.authEndpoint &&
+          const DeepCollectionEquality().equals(authHeaders, other.authHeaders) &&
+          forceAuth == other.forceAuth &&
+          userId == other.userId &&
+          webSocketEndpoint == other.webSocketEndpoint;
+
+  @override
+  int get hashCode =>
+      version.hashCode ^
+      apiKey.hashCode ^
+      clusterId.hashCode ^
+      enableLogs.hashCode ^
+      notifySelf.hashCode ^
+      jwt.hashCode ^
+      presence.hashCode ^
+      authEndpoint.hashCode ^
+      authHeaders.hashCode ^
+      forceAuth.hashCode ^
+      userId.hashCode ^
+      webSocketEndpoint.hashCode;
 
   @override
   String toString() {
