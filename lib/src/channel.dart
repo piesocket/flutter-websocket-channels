@@ -26,6 +26,7 @@ class Channel {
   late WebSocketChannel ws;
   bool _shouldReconnect = false;
   bool _connected = false;
+  bool _forceDisconnected = false;
   StreamSubscription? _streamSubscription;
   Completer<void>? _connectCompleter;
   final _connectTracker = <String, Completer<void>>{};
@@ -124,6 +125,7 @@ class Channel {
     final completer = Completer<void>();
     _connectTracker['last'] = _connectCompleter = completer;
     _connected = true;
+    _forceDisconnected = false;
     _streamSubscription?.cancel();
     _streamSubscription = null;
     logger.debug("Connecting to: $id");
@@ -170,6 +172,7 @@ class Channel {
 
     _shouldReconnect = false;
     _connected = false;
+    _forceDisconnected = true;
     _connectCompleter = null;
     ws.sink.close(NORMAL_CLOSURE_STATUS);
     _streamSubscription?.cancel();
@@ -365,7 +368,9 @@ class Channel {
     _fireEvent(event);
 
     _connected = false;
-    reconnect();
+    if (!_forceDisconnected) {
+      reconnect();
+    }
   }
 
   void onError(dynamic error) {
