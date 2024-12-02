@@ -4,6 +4,7 @@
 - Allow passing `PieSocketOptions` per room.
 - Add ability to listen for events by prefix.
 - Add `closeAll` method to close all existing connection.
+- Explicitly invoke the `connect` method to manage initial error and implement retry logic.
 
 ## 1.0.1
 

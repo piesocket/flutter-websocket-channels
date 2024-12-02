@@ -25,11 +25,11 @@ class Channel {
 
   late WebSocketChannel ws;
   bool _shouldReconnect = false;
+  bool _connected = false;
   StreamSubscription? _streamSubscription;
 
   Channel(this.id, this.options, this.logger) {
     _shouldReconnect = false;
-    connect();
   }
 
   factory Channel.connect(String websocketUrl, bool enableLogs) {
@@ -117,6 +117,9 @@ class Channel {
   }
 
   void connect() {
+    if (_connected) return;
+
+    _connected = true;
     _streamSubscription?.cancel();
     _streamSubscription = null;
     logger.debug("Connecting to: $id");
@@ -137,6 +140,7 @@ class Channel {
       if (e.toString().contains("will fetch from authEndpoint")) {
         logger.debug("Defer connection: fetching token from authEndpoint");
       } else {
+        _connected = false;
         rethrow;
       }
     }
@@ -144,13 +148,15 @@ class Channel {
 
   void disconnect() {
     _shouldReconnect = false;
+    _connected = false;
     ws.sink.close(NORMAL_CLOSURE_STATUS);
     _streamSubscription?.cancel();
     _streamSubscription = null;
   }
 
   void reconnect() {
-    if (_shouldReconnect) {
+    if (_shouldReconnect || !_connected) {
+      _connected = false;
       connect();
     }
   }
@@ -329,6 +335,7 @@ class Channel {
     const event = PieSocketEvent(event: 'system:closed');
     _fireEvent(event);
 
+    _connected = false;
     reconnect();
   }
 

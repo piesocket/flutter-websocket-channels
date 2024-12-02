@@ -17,6 +17,7 @@ class Example {
 
     piesocket = PieSocket(options);
     room = piesocket.join("test-room");
+    room.connect();
 
     room.listen("*", (PieSocketEvent event) {
       log("EVENT!");
