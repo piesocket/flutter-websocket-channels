@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -24,6 +25,7 @@ class Channel {
 
   late WebSocketChannel ws;
   bool _shouldReconnect = false;
+  StreamSubscription? _streamSubscription;
 
   Channel(this.id, this.options, this.logger) {
     _shouldReconnect = false;
@@ -115,6 +117,8 @@ class Channel {
   }
 
   void connect() {
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
     logger.debug("Connecting to: $id");
 
     try {
@@ -123,7 +127,7 @@ class Channel {
 
       ws = WebSocketChannel.connect(Uri.parse(endpoint));
 
-      ws.stream.listen(
+      _streamSubscription = ws.stream.listen(
         (message) => onMessage(message),
         cancelOnError: true,
         onError: (error) => onError(error),
@@ -141,6 +145,8 @@ class Channel {
   void disconnect() {
     _shouldReconnect = false;
     ws.sink.close(NORMAL_CLOSURE_STATUS);
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
   }
 
   void reconnect() {
