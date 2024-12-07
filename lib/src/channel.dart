@@ -1,63 +1,63 @@
+import 'dart:async';
 import 'dart:convert';
 
-import 'misc/logger.dart';
-import 'misc/piesocket_event.dart';
-import 'misc/piesocket_exception.dart';
-import 'misc/piesocket_options.dart';
-
-import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
+import 'package:piesocket_channels/src/misc/logger.dart';
+import 'package:piesocket_channels/src/misc/piesocket_event.dart';
+import 'package:piesocket_channels/src/misc/piesocket_exception.dart';
+import 'package:piesocket_channels/src/misc/piesocket_options.dart';
+import 'package:uuid/uuid.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+typedef OnEvent = void Function(PieSocketEvent event);
 
 class Channel {
   static const int NORMAL_CLOSURE_STATUS = 1000;
-  late String id;
+
+  final String id;
+  final String uuid = const Uuid().v4();
+  final Logger logger;
+  PieSocketOptions options;
+
+  final Map<String, Map<String, OnEvent>> _listeners = {};
+  final Map<String, Map<String, OnEvent>> _prefixListeners = {};
+  List _members = [];
+
   late WebSocketChannel ws;
-  late String uuid;
+  bool _shouldReconnect = false;
+  bool _connected = false;
+  bool _forceDisconnected = false;
+  StreamSubscription? _streamSubscription;
+  Completer<void>? _connectCompleter;
+  final _connectTracker = <String, Completer<void>>{};
 
-  late Map<String, Map<String, Function(PieSocketEvent event)>> _listeners;
-  late Logger _logger;
-  late PieSocketOptions _options;
-  late List _members;
-  late bool _shouldReconnect;
-
-  Channel(String roomId, this._options, this._logger) {
-    id = roomId;
-    _listeners = {};
-    uuid = const Uuid().v4();
+  Channel(this.id, this.options, this.logger) {
     _shouldReconnect = false;
-
-    connect();
   }
 
-  Channel.connect(String websocketUrl, bool enableLogs) {
-    id = "standalone";
-    _listeners = {};
-    _logger = Logger(enableLogs);
-    uuid = const Uuid().v4();
-    _shouldReconnect = false;
-
-    _options = PieSocketOptions();
-    _options.setWebSocketEndpoint(websocketUrl);
-
-    connect();
+  factory Channel.connect(String websocketUrl, bool enableLogs) {
+    return Channel(
+      'standalone',
+      PieSocketOptions(webSocketEndpoint: websocketUrl),
+      Logger(enableLogs),
+    );
   }
 
   String buildEndpoint() {
-    if (_options.getWebSocketEndpoint().isNotEmpty) {
-      return _options.getWebSocketEndpoint();
+    if (options.webSocketEndpoint.isNotEmpty) {
+      return options.webSocketEndpoint;
     }
 
     String endpoint =
-        "wss://${_options.getClusterId()}.piesocket.com/v${_options.getVersion()}/$id?api_key=${_options.getApiKey()}&notify_self=${_options.getNotifySelf()}&source=fluttersdk&v=1&be=1&presence=${_options.getPresence()}";
+        "wss://${options.clusterId}.piesocket.com/v${options.version}/$id?api_key=${options.apiKey}&notify_self=${options.getNotifySelf()}&source=fluttersdk&v=1&be=1&presence=${options.getPresence()}";
 
     String? jwt = getAuthToken();
     if (jwt != null) {
       endpoint = "$endpoint&jwt=$jwt";
     }
 
-    if (_options.getUserId().isNotEmpty) {
-      endpoint = "$endpoint&user=${_options.getUserId()}";
+    if (options.userId.isNotEmpty) {
+      endpoint = "$endpoint&user=${options.userId}";
     }
 
     //Add UUID
@@ -67,7 +67,7 @@ class Channel {
   }
 
   bool isGuarded() {
-    if (_options.getForceAuth()) {
+    if (options.forceAuth) {
       return true;
     }
 
@@ -75,18 +75,16 @@ class Channel {
   }
 
   String? getAuthToken() {
-    if (_options.getJwt().isNotEmpty) {
-      return _options.getJwt();
+    if (options.jwt.isNotEmpty) {
+      return options.jwt;
     }
 
     if (isGuarded()) {
-      if (_options.getAuthEndpoint().isNotEmpty) {
+      if (options.authEndpoint.isNotEmpty) {
         getAuthTokenFromServer();
-        throw PieSocketException(
-            "JWT not provided, will fetch from authEndpoint.");
+        throw PieSocketException("JWT not provided, will fetch from authEndpoint.");
       } else {
-        throw PieSocketException(
-            "Neither JWT, nor authEndpoint is provided for private channel authentication.");
+        throw PieSocketException("Neither JWT, nor authEndpoint is provided for private channel authentication.");
       }
     }
 
@@ -95,128 +93,197 @@ class Channel {
 
   Future<void> getAuthTokenFromServer() async {
     try {
-      String apiURL = _options.getAuthEndpoint();
+      String apiURL = options.authEndpoint;
 
       Map<String, String> headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        ..._options.getAuthHeaders()
+        ...options.authHeaders,
       };
 
-      var body = json.encode({"channel_name": id, "connection_uuid": uuid});
-
-      var apiResult = await http.post(
+      final body = json.encode({"channel_name": id, "connection_uuid": uuid});
+      final apiResult = await http.post(
         Uri.parse(apiURL),
         headers: headers,
         body: body,
       );
 
-      var jsonObject = json.decode(apiResult.body) as Map;
+      final jsonObject = json.decode(apiResult.body) as Map;
       if (jsonObject['auth'] != null) {
-        _logger.debug("Auth token fetched, resuming connection");
-        _options.setJwt(jsonObject['auth']);
+        logger.debug("Auth token fetched, resuming connection");
+        options = options.copyWith(jwt: jsonObject['auth']);
         connect();
       }
     } catch (e) {
-      throw PieSocketException(
-          "Auth Token Response Parsing Error: ${e.toString()}");
+      throw PieSocketException("Auth Token Response Parsing Error: ${e.toString()}");
     }
   }
 
-  connect() {
-    _logger.debug("Connecting to: $id");
+  Future<void> connect() async {
+    if (_connectCompleter != null) return _connectCompleter!.future;
+
+    final completer = Completer<void>();
+    _connectTracker['last'] = _connectCompleter = completer;
+    _connected = true;
+    _forceDisconnected = false;
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
+    logger.debug("Connecting to: $id");
 
     try {
-      String endpoint = buildEndpoint();
-      _logger.debug("WebSocket Endpoint: $endpoint");
+      final endpoint = buildEndpoint();
+      logger.debug("WebSocket Endpoint: $endpoint");
 
       ws = WebSocketChannel.connect(Uri.parse(endpoint));
 
-      ws.stream.listen(
-          (message) {
-            onMessage(message);
-          },
-          cancelOnError: true,
-          onError: (error) {
-            onError(error);
-          },
-          onDone: () {
-            onClosing();
-          });
-    } catch (e) {
+      _streamSubscription = ws.stream.listen(
+        (message) => onMessage(message),
+        cancelOnError: true,
+        onError: (error) => onError(error),
+        onDone: () {
+          // if not connected yet
+          if (!_shouldReconnect && !completer.isCompleted) {
+            _connected = false;
+            _connectCompleter = null;
+            completer.completeError(PieSocketException('Failed to establish the connection'));
+            return;
+          }
+          onClosing();
+        },
+      );
+    } catch (e, s) {
       if (e.toString().contains("will fetch from authEndpoint")) {
-        _logger.debug("Defer connection: fetching token from authEndpoint");
+        logger.debug("Defer connection: fetching token from authEndpoint");
+        completer.complete();
       } else {
-        rethrow;
+        _connected = false;
+        _connectCompleter = null;
+        completer.completeError(e, s);
       }
     }
+
+    return completer.future;
   }
 
   void disconnect() {
+    if (_connectCompleter?.isCompleted != true) {
+      _connectCompleter?.complete();
+    }
+
     _shouldReconnect = false;
+    _connected = false;
+    _forceDisconnected = true;
+    _connectCompleter = null;
     ws.sink.close(NORMAL_CLOSURE_STATUS);
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
   }
 
-  void reconnect() {
-    if (_shouldReconnect) {
-      connect();
+  Future<void> reconnect() async {
+    if (_shouldReconnect || !_connected) {
+      // ensure completer is completed if not null and make it null in order to connect again
+      if (_connectCompleter?.isCompleted != true) _connectCompleter?.completeError('Reconnecting...');
+      _connectCompleter = null;
+      return connect();
     }
   }
 
-  String listen(String eventName, Function(PieSocketEvent event) callback) {
-    late Map<String, Function(PieSocketEvent event)> callbacks;
+  bool get hasAnyListener {
+    return _listeners.values.any((v) => v.values.isNotEmpty) || _prefixListeners.values.any((v) => v.values.isNotEmpty);
+  }
 
-    if (_listeners.containsKey(eventName)) {
-      callbacks = _listeners[eventName]!;
+  String listen(String eventName, OnEvent callback) {
+    if (eventName.endsWith('*') && eventName.length > 1) {
+      final Map<String, OnEvent> callbacks;
+      final prefix = eventName.substring(0, eventName.length - 1);
+
+      if (_prefixListeners.containsKey(prefix)) {
+        callbacks = _prefixListeners[prefix]!;
+      } else {
+        callbacks = {};
+      }
+
+      final listenerId = const Uuid().v4();
+      callbacks[listenerId] = callback;
+      _prefixListeners[prefix] = callbacks;
+
+      return listenerId;
     } else {
-      callbacks = {};
+      final Map<String, OnEvent> callbacks;
+      if (_listeners.containsKey(eventName)) {
+        callbacks = _listeners[eventName]!;
+      } else {
+        callbacks = {};
+      }
+
+      final listenerId = const Uuid().v4();
+      callbacks[listenerId] = callback;
+      _listeners[eventName] = callbacks;
+
+      return listenerId;
     }
-
-    var listenerId = const Uuid().v4();
-
-    callbacks[listenerId] = callback;
-    _listeners[eventName] = callbacks;
-
-    return listenerId;
   }
 
   void removeListener(String eventName, String listenerId) {
-    if (_listeners.containsKey(eventName)) {
-      _listeners[eventName]?.remove(listenerId);
+    _listeners[eventName]?.remove(listenerId);
+
+    if (!eventName.endsWith('*')) {
+      return;
     }
+
+    final prefixEventName = eventName.length > 1 ? eventName.substring(0, eventName.length - 1) : eventName;
+    _prefixListeners[prefixEventName]?.remove(listenerId);
   }
 
   void removeAllListeners(String eventName) {
     if (_listeners.containsKey(eventName)) {
       _listeners.remove(eventName);
     }
+
+    final prefixEventName = eventName.length > 1 ? eventName.substring(0, eventName.length - 1) : eventName;
+    if (_prefixListeners.containsKey(prefixEventName)) {
+      _prefixListeners.remove(prefixEventName);
+    }
   }
 
-  void fireEvent(PieSocketEvent event) {
-    _logger.debug("Firing Event: $event");
+  void _fireEvent(PieSocketEvent event) {
+    logger.debug("Firing Event: $event");
 
-    if (_listeners.containsKey(event.getEvent())) {
-      triggerAllListeners(event.getEvent(), event);
+    if (_listeners.containsKey(event.event)) {
+      _triggerAllListeners(event.event, event);
     }
 
     if (_listeners.containsKey("*")) {
-      triggerAllListeners("*", event);
+      _triggerAllListeners("*", event);
     }
-  }
 
-  void triggerAllListeners(String listenerKey, PieSocketEvent event) {
-    Map<String, Function(PieSocketEvent event)>? callbacks =
-        _listeners[listenerKey];
-
-    if (callbacks != null) {
-      for (var k in callbacks.keys) {
-        callbacks[k]!(event);
+    for (final prefixEntry in _prefixListeners.entries) {
+      if (event.event.startsWith(prefixEntry.key)) {
+        _triggerPrefixListeners(prefixEntry.key, event);
       }
     }
   }
 
+  void _triggerAllListeners(String eventName, PieSocketEvent event) {
+    final Map<String, OnEvent>? callbacks = _listeners[eventName];
+    if (callbacks == null) return;
+
+    for (final fn in callbacks.values) {
+      fn(event);
+    }
+  }
+
+  void _triggerPrefixListeners(String eventName, PieSocketEvent event) {
+    final Map<String, OnEvent>? callbacks = _prefixListeners[eventName];
+    if (callbacks == null) return;
+
+    for (final fn in callbacks.values) {
+      fn(event);
+    }
+  }
+
   void publish(PieSocketEvent event) {
-    ws.sink.add(event.toString());
+    ws.sink.add(event.getEncodedData());
   }
 
   void send(String text) {
@@ -224,77 +291,72 @@ class Channel {
   }
 
   void onOpen() {
-    PieSocketEvent event = PieSocketEvent("system:connected");
-    fireEvent(event);
+    PieSocketEvent event = PieSocketEvent(event: "system:connected");
+    _fireEvent(event);
 
     _shouldReconnect = true;
+    if (_connectCompleter != null && !_connectCompleter!.isCompleted && _connectTracker['last'] == _connectCompleter) {
+      _connectCompleter!.complete();
+    }
   }
 
   void onMessage(String text) {
     if (_listeners.containsKey("system:message")) {
-      PieSocketEvent payload = PieSocketEvent("system:message");
-      payload.setData(text);
-      triggerAllListeners("system:message", payload);
+      final payload = PieSocketEvent(event: 'system:message', data: text);
+      _triggerAllListeners("system:message", payload);
     }
 
     try {
-      var obj = json.decode(
-        text,
-      );
+      final obj = json.decode(text);
+
       if (obj["event"] != null) {
-        String eventName = obj["event"];
+        final eventName = obj["event"] as String;
+
         if (eventName == "system:boot") {
           onOpen();
         } else {
-          PieSocketEvent event = PieSocketEvent(eventName);
+          Object? eventData;
+          String? eventMeta;
 
-          if (obj["data"] != null) {
-            String eventData;
-
-            if (obj['data'].runtimeType == String) {
-              eventData = obj['data'];
-            } else {
-              eventData = jsonEncode(obj['data']);
-            }
-
-            event.setData(eventData);
+          if (obj['data'] != null) {
+            eventData = obj['data'];
           }
-          if (obj["meta"] != null) {
-            String eventMeta;
 
-            if (obj['meta'].runtimeType == String) {
-              eventMeta = obj['meta'];
-            } else {
-              eventMeta = jsonEncode(obj['meta']);
-            }
-            event.setMeta(eventMeta);
+          if (obj["meta"] != null) {
+            eventMeta = obj['meta'];
           }
 
           // Trigger listeners
+          final event = PieSocketEvent(
+            event: eventName,
+            data: eventData ?? '',
+            meta: eventMeta ?? '',
+          );
           handleSystemEvents(event);
-          fireEvent(event);
+          _fireEvent(event);
         }
       }
+
       if (obj["error"] != null) {
         _shouldReconnect = false;
-        PieSocketEvent event = PieSocketEvent("system:error");
-        event.setData(obj["error"]);
-        fireEvent(event);
+        PieSocketEvent event = PieSocketEvent(event: "system:error", data: obj["error"] ?? 'Error');
+        _fireEvent(event);
       }
     } catch (e) {
       //Ignore error
-      _logger.debug("Non-json message received: $text");
+      logger.debug("Non-json message received: $text");
     }
   }
 
   void handleSystemEvents(PieSocketEvent event) {
     try {
       //Update members list
-      if (event.getEvent() == "system:member_list" ||
-          event.getEvent() == "system:member_joined" ||
-          event.getEvent() == "system:member_left") {
-        var data = json.decode(event.getData());
-        _members = data["members"] as List;
+      switch (event.event) {
+        case 'system:member_list':
+        case 'system:member_joined':
+        case 'system:member_left':
+          var data = json.decode(event.data as String);
+          _members = data["members"] as List;
       }
     } catch (e) {
       throw PieSocketException(e.toString());
@@ -302,16 +364,18 @@ class Channel {
   }
 
   void onClosing() {
-    PieSocketEvent event = PieSocketEvent("system:closed");
-    fireEvent(event);
+    const event = PieSocketEvent(event: 'system:closed');
+    _fireEvent(event);
 
-    reconnect();
+    _connected = false;
+    if (!_forceDisconnected) {
+      reconnect();
+    }
   }
 
   void onError(dynamic error) {
-    PieSocketEvent event = PieSocketEvent("system:error");
-    event.setData(error.toString());
-    fireEvent(event);
+    final event = PieSocketEvent(event: 'system:error', data: error.toString());
+    _fireEvent(event);
   }
 
   dynamic getMemberByUUID(String uuid) {

@@ -1,127 +1,105 @@
 import 'dart:core';
+import 'package:collection/collection.dart';
 
 class PieSocketOptions {
-  late String _apiKey;
-  late String _clusterId;
-  late bool _enableLogs;
-  late bool _notifySelf;
-  late String _jwt;
-  late bool _presence;
-  late String _authEndpoint;
-  late Map<String, String> _authHeaders;
-  late bool _forceAuth;
-  late String _userId;
-  late String _version;
-  late String _webSocketEndpoint;
+  const PieSocketOptions({
+    this.apiKey = '',
+    this.clusterId = '',
+    this.enableLogs = false,
+    this.notifySelf = false,
+    this.jwt = '',
+    this.presence = false,
+    this.authEndpoint = '',
+    this.authHeaders = const {},
+    this.forceAuth = false,
+    this.userId = '',
+    this.webSocketEndpoint = '',
+  });
 
-  PieSocketOptions() {
-    _version = "3";
-    _enableLogs = true;
-    _notifySelf = true;
-    _presence = false;
-    _forceAuth = false;
-    _clusterId = "";
-    _apiKey = "";
-    _jwt = "";
-    _authEndpoint = "";
-    _authHeaders = {};
-    _userId = "";
-    _webSocketEndpoint = "";
-  }
-
-  String getWebSocketEndpoint() {
-    return _webSocketEndpoint;
-  }
-
-  void setWebSocketEndpoint(String webSocketEndpoint) {
-    _webSocketEndpoint = webSocketEndpoint;
-  }
-
-  String getVersion() {
-    return _version;
-  }
-
-  void setVersion(String version) {
-    _version = version;
-  }
-
-  String getApiKey() {
-    return _apiKey;
-  }
-
-  void setApiKey(String apiKey) {
-    _apiKey = apiKey;
-  }
-
-  String getClusterId() {
-    return _clusterId;
-  }
-
-  void setClusterId(String clusterId) {
-    _clusterId = clusterId;
-  }
-
-  bool getEnableLogs() {
-    return _enableLogs;
-  }
-
-  void setEnableLogs(bool enableLogs) {
-    _enableLogs = enableLogs;
-  }
+  final String version = '3';
+  final String apiKey;
+  final String clusterId;
+  final bool enableLogs;
+  final bool notifySelf;
+  final String jwt;
+  final bool presence;
+  final String authEndpoint;
+  final Map<String, String> authHeaders;
+  final bool forceAuth;
+  final String userId;
+  final String webSocketEndpoint;
 
   int getNotifySelf() {
-    return _notifySelf ? 1 : 0;
-  }
-
-  void setNotifySelf(bool notifySelf) {
-    _notifySelf = notifySelf;
-  }
-
-  String getJwt() {
-    return _jwt;
-  }
-
-  void setJwt(String jwt) {
-    _jwt = jwt;
+    return notifySelf ? 1 : 0;
   }
 
   int getPresence() {
-    return _presence ? 1 : 0;
+    return presence ? 1 : 0;
   }
 
-  void setPresence(bool presence) {
-    _presence = presence;
+  PieSocketOptions copyWith({
+    String? apiKey,
+    String? clusterId,
+    bool? enableLogs,
+    bool? notifySelf,
+    String? jwt,
+    bool? presence,
+    String? authEndpoint,
+    Map<String, String>? authHeaders,
+    bool? forceAuth,
+    String? userId,
+    String? webSocketEndpoint,
+  }) {
+    return PieSocketOptions(
+      apiKey: apiKey ?? this.apiKey,
+      clusterId: clusterId ?? this.clusterId,
+      enableLogs: enableLogs ?? this.enableLogs,
+      notifySelf: notifySelf ?? this.notifySelf,
+      jwt: jwt ?? this.jwt,
+      presence: presence ?? this.presence,
+      authEndpoint: authEndpoint ?? this.authEndpoint,
+      authHeaders: authHeaders ?? this.authHeaders,
+      forceAuth: forceAuth ?? this.forceAuth,
+      userId: userId ?? this.userId,
+      webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
+    );
   }
 
-  String getAuthEndpoint() {
-    return _authEndpoint;
-  }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PieSocketOptions &&
+          runtimeType == other.runtimeType &&
+          version == other.version &&
+          apiKey == other.apiKey &&
+          clusterId == other.clusterId &&
+          enableLogs == other.enableLogs &&
+          notifySelf == other.notifySelf &&
+          jwt == other.jwt &&
+          presence == other.presence &&
+          authEndpoint == other.authEndpoint &&
+          const DeepCollectionEquality().equals(authHeaders, other.authHeaders) &&
+          forceAuth == other.forceAuth &&
+          userId == other.userId &&
+          webSocketEndpoint == other.webSocketEndpoint;
 
-  void setAuthEndpoint(String authEndpoint) {
-    _authEndpoint = authEndpoint;
-  }
+  @override
+  int get hashCode =>
+      version.hashCode ^
+      apiKey.hashCode ^
+      clusterId.hashCode ^
+      enableLogs.hashCode ^
+      notifySelf.hashCode ^
+      jwt.hashCode ^
+      presence.hashCode ^
+      authEndpoint.hashCode ^
+      authHeaders.hashCode ^
+      forceAuth.hashCode ^
+      userId.hashCode ^
+      webSocketEndpoint.hashCode;
 
-  Map<String, String> getAuthHeaders() {
-    return _authHeaders;
-  }
-
-  void setAuthHeaders(Map<String, String> authHeaders) {
-    _authHeaders = authHeaders;
-  }
-
-  bool getForceAuth() {
-    return _forceAuth;
-  }
-
-  void setForceAuth(bool forceAuth) {
-    _forceAuth = forceAuth;
-  }
-
-  String getUserId() {
-    return _userId;
-  }
-
-  void setUserId(String userId) {
-    _userId = userId;
+  @override
+  String toString() {
+    return 'PieSocketOptions{version: $version, apiKey: $apiKey, clusterId: $clusterId, enableLogs: $enableLogs, notifySelf: $notifySelf, jwt: $jwt, presence: $presence, authEndpoint: $authEndpoint, authHeaders: $authHeaders, forceAuth: $forceAuth, userId: $userId, webSocketEndpoint: $webSocketEndpoint}';
   }
 }

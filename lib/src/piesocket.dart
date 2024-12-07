@@ -1,42 +1,32 @@
-import 'dart:collection';
-
 import 'channel.dart';
 import 'misc/logger.dart';
-import 'misc/piesocket_exception.dart';
 import 'misc/piesocket_options.dart';
 
 class PieSocket {
-  String counter = "ok";
+  PieSocket(this.options)
+      : assert(options.apiKey.isNotEmpty, 'API Key is should be provided'),
+        assert(options.clusterId.isNotEmpty, 'Cluster ID should be provided'),
+        logger = Logger(options.enableLogs);
 
-  late Map<String, Channel> rooms;
-  late PieSocketOptions options;
-  late Logger logger;
+  final Map<String, Channel> rooms = {};
+  final Logger logger;
+  final PieSocketOptions options;
 
-  PieSocket(PieSocketOptions pieSocketOptions) {
-    rooms = HashMap();
-    options = pieSocketOptions;
-    logger = Logger(options.getEnableLogs());
+  Channel join(String roomId, {PieSocketOptions? options}) {
+    final opt = options ?? this.options;
+    Channel? room = rooms[roomId];
+    if (room != null) {
+      if (room.options != opt) {
+        logger.debug("Option changed for existing room instance: $roomId");
+        room.options = opt;
+        room.disconnect();
+      }
 
-    _validateOptions();
-  }
-
-  void _validateOptions() {
-    if (options.getClusterId().isEmpty) {
-      throw PieSocketException("Cluster ID is not provided");
-    }
-
-    if (options.getApiKey().isEmpty) {
-      throw PieSocketException("API Key is not provided");
-    }
-  }
-
-  Channel join(String roomId) {
-    if (rooms.containsKey(roomId)) {
       logger.debug("Returning existing room instance: $roomId");
-      return rooms[roomId]!;
+      return room;
     }
 
-    Channel room = Channel(roomId, options, logger);
+    room = Channel(roomId, opt, logger);
     rooms[roomId] = room;
 
     return room;
@@ -52,7 +42,25 @@ class PieSocket {
     }
   }
 
+  Channel? roomOf(String name) {
+    return rooms[name];
+  }
+
   Map<String, Channel> getAllRooms() {
-    return rooms;
+    return {...rooms};
+  }
+
+  /// Close all connection
+  void closeAll() {
+    final rooms = {...this.rooms};
+    this.rooms.clear();
+
+    for (final entry in rooms.entries) {
+      final roomId = entry.key;
+      final room = entry.value;
+
+      logger.debug("DISCONNECT: Closing room connection: $roomId");
+      room.disconnect();
+    }
   }
 }
